@@ -7,7 +7,6 @@
     <style>
         /* 🎨 全体のデザイン設定 */
         body {
-            /* お好みのARKの壁紙URLや画像パスに変えられます */
             background-image: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url('https://images.steamusercontent.com/ugc/1653349811966104941/8621516B9F81A4A21A4D26B241C7245F351929B9/?imw=5000&imh=5000&ima=fit&impolicy=Letterbox&imcolor=%23000000&letterbox=false');
             background-size: cover;
             background-position: center;
@@ -36,11 +35,21 @@
 
         h1 {
             font-size: 28px;
-            margin-bottom: 10px;
+            margin-bottom: 5px;
             letter-spacing: 2px;
             text-transform: uppercase;
             color: #00ffcc;
             text-shadow: 0 0 10px rgba(0, 255, 204, 0.5);
+        }
+
+        /* ✨ 追加したステータス表示のスタイル */
+        .status-badge {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            letter-spacing: 1px;
+            color: #95a5a6; /* 初期状態はグレー */
+            text-shadow: 0 0 5px rgba(255, 255, 255, 0.1);
         }
 
         .subtitle {
@@ -119,6 +128,9 @@
 
     <div class="container">
         <h1>ARK Server Control</h1>
+        
+        <div class="status-badge" id="server-status">🔄 サーバー状態を確認中...</div>
+        
         <div class="subtitle">遊び終わったら必ず【停止】を押してね！</div>
         
         <div class="btn-group">
@@ -130,12 +142,48 @@
     </div>
 
     <script>
-        // 🛠️ ここにGCPで発行されたURLを貼り付けます！
+        // 🛠️ GCPで発行された各URLを設定します！
         const URLS = {
             start: 'https://start-ark-server-962204122249.us-central1.run.app',
-            stop: 'https://stop-ark-server-962204122249.us-central1.run.app'
+            stop: 'https://stop-ark-server-962204122249.us-central1.run.app',
+            // 🚨 ここに新しくデプロイした「getInstanceStatus」のCloud FunctionsのURLを貼り付けてください！
+            status: 'https://YOUR_CLOUD_FUNCTIONS_URL/getInstanceStatus'
         };
 
+        // 🔍 サーバーの状態を取得して画面に反映する関数
+        async function checkServerStatus() {
+            const statusLabel = document.getElementById('server-status');
+            
+            try {
+                const response = await fetch(URLS.status);
+                if (!response.ok) throw new Error('ステータス取得失敗');
+                const data = await response.json();
+                
+                // GCPのステータス（RUNNING等）に応じて文字と色を変える
+                if (data.status === 'RUNNING') {
+                    statusLabel.innerText = '🟢 起動中 (RUNNING)';
+                    statusLabel.style.color = '#00ff88'; // 起動ボタンと同じ鮮やかな緑
+                } else if (data.status === 'TERMINATED') {
+                    statusLabel.innerText = '🔴 停止中 (STOPPED)';
+                    statusLabel.style.color = '#ff4444'; // 停止ボタンと同じ赤
+                } else if (data.status === 'PROVISIONING' || data.status === 'STAGING') {
+                    statusLabel.innerText = '🟡 起動処理中...';
+                    statusLabel.style.color = '#f1c40f'; // 黄色
+                } else if (data.status === 'STOPPING') {
+                    statusLabel.innerText = '🟡 停止処理中...';
+                    statusLabel.style.color = '#e67e22'; // オレンジ
+                } else {
+                    statusLabel.innerText = `❓ 状態: ${data.status}`;
+                    statusLabel.style.color = '#aaa';
+                }
+            } catch (error) {
+                console.error('Status Error:', error);
+                statusLabel.innerText = '❌ 状態取得エラー';
+                statusLabel.style.color = '#888';
+            }
+        }
+
+        // 🚀 ボタンが押された時のコントロール処理
         async function controlServer(action) {
             const startBtn = document.getElementById('start-btn');
             const stopBtn = document.getElementById('stop-btn');
@@ -150,13 +198,15 @@
             msgArea.innerText = action === 'start' ? '🚀 起動リクエストを送信中...' : '🛑 停止リクエストを送信中...';
 
             try {
-                // バックグラウンドでGCPのURLを叩く
                 const response = await fetch(URLS[action], { method: 'POST' });
                 const text = await response.text();
 
                 if (response.ok) {
                     msgArea.className = 'info';
                     msgArea.innerText = text;
+                    
+                    // リクエストが成功したら、少し待ってステータスを即時更新
+                    setTimeout(checkServerStatus, 2000);
                 } else {
                     msgArea.className = 'error';
                     msgArea.innerText = `❌ エラーが発生しました: ${text}`;
@@ -172,6 +222,12 @@
                 }, 3000);
             }
         }
+
+        // 🌐 画面が開いた時にまず自動で状態をチェックする
+        window.addEventListener('DOMContentLoaded', checkServerStatus);
+
+        // ⏱️ 15秒ごとにサーバーの状態を自動でバックグラウンド更新する
+        setInterval(checkServerStatus, 15000);
     </script>
 </body>
 </html>
